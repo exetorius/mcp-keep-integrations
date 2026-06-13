@@ -1,61 +1,54 @@
-# VibeUE — MCP Quick Reference
+# VibeUE — Agent Instructions
 
-You have direct access to Unreal Engine 5.7 via the VibeUE Python API.
+You are connected to an Unreal Engine editor via the VibeUE MCP server. You have 10 tools for Python execution, asset management, domain skill loading, log reading, terrain generation, and web research.
 
-## Python Basics
+---
 
-```python
-import unreal  # lowercase — NOT 'Unreal'
+## Core workflow
+
+**Discover before you execute.** Never write Python code for a class or function you haven't confirmed exists with that exact signature. The UE Python API is large and wrong names fail silently or error at runtime.
+
+```
+manage_skills (load relevant domain pack)
+  → discover_python_class / discover_python_function (confirm signatures)
+    → execute_python_code (run the code)
+      → read_logs (if something went wrong)
 ```
 
-**DEPRECATED:** `unreal.EditorLevelLibrary` is removed in UE 5.7+. Use `unreal.get_editor_subsystem(unreal.EditorActorSubsystem)`. `get_all_level_actors_of_class` does NOT exist — use `get_all_level_actors()` + `isinstance()`.
+**Load skills proactively, not reactively.** Before working on blueprints, animation, materials, niagara, UMG, state trees, enhanced input, audio, or landscape — load the relevant skill pack first. Load multiple skills in one call; it is more efficient than separate calls.
 
-## Skills — Load Before Working
+**Use manage_asset for all asset operations.** Do not reach for raw Python when manage_asset covers the operation. It handles Content Browser paths, reference tracking, and edge cases that raw Python gets wrong. Always use Content Browser paths (`/Game/Blueprints/BP_Player`), never file system paths. Never simulate a move with duplicate + delete — use the `move` action.
 
-Always load the domain skill before executing tasks:
-```
-manage_skills(action="load", skill_name="blueprints")   # then discover, then execute
-manage_skills(action="list")                             # see all available skills
-```
+---
 
-Pattern: load skill → read `vibeue_classes` → `discover_python_class(...)` → `execute_python_code(...)`. Never guess method names — confirm via discovery first.
+## Python rules
 
-## Assets — Use manage_asset, Not Python
+- `import unreal` — always lowercase. `import Unreal` fails.
+- Subsystems: `unreal.get_editor_subsystem(unreal.EditorActorSubsystem)` — `unreal.EditorLevelLibrary` is removed in UE 5.7+.
+- After adding variables, functions, or components to a Blueprint: always call `unreal.BlueprintService.compile_blueprint(path)`. Re-read the graph before claiming the task is complete.
+- 60 second execution timeout. For long operations, break them into smaller steps.
+- Known limitation: `add_set_variable_node` and `add_get_variable_node` fail for object reference variable types. Use `execute_python_code` with the direct Python API as a workaround.
 
-**For find / open / save / duplicate / move / delete — use the `manage_asset` tool, not Python.**
+---
 
-| Goal | Call |
-|------|------|
-| Find by name | `manage_asset(action="search", search_term="BP_Enemy", asset_type="Blueprint")` |
-| Confirm path | `manage_asset(action="find", asset_path="/Game/AI/ST_Cube")` |
-| List folder | `manage_asset(action="list", path="/Game/AI")` |
-| Open in editor | `manage_asset(action="open", asset_path="...")` |
-| Save | `manage_asset(action="save", asset_path="...")` |
-| Move/rename | `manage_asset(action="move", source_path="...", destination_path="...")` |
-| Delete | `manage_asset(action="delete", asset_path="...")` |
+## Widget Blueprint inspection
 
-Never guess paths. Never duplicate+delete to simulate a move — that breaks references.
+Two calls, different cost — pick the right one:
 
-## Critical Rules
+- `unreal.WidgetService.list_components(path)` — hierarchy and parent/child relationships, lightweight. Use this for "what's in this widget" questions.
+- `unreal.WidgetService.get_widget_snapshot(path)` — full hierarchy + slot info + all properties. Use only when you need property data (bindings, anchors, visibility, is_variable etc.). Token-heavy — don't use it just for structure.
 
-**Non-destructive:** Never remove-and-recreate to change a value. Use a direct setter. If no setter exists, stop and report — don't fake it with destructive fallbacks.
+---
 
-**Check before create:** Use `*_exists()` or `manage_asset(action="find", ...)` before creating assets to avoid duplicates.
+## Loop prevention
 
-**Compile after structure changes:** After adding variables, functions, or components: `unreal.BlueprintService.compile_blueprint(path)`.
+- Track outcomes, not just arguments. If you get the same result twice from the same tool call, stop — do not retry.
+- Maximum 3 attempts at the same operation.
+- After 2 failures: explain what you tried and ask the user. Do not keep hammering.
+- Try at most one alternative approach after a failure. If that also fails, stop.
 
-**Verify graph edits:** A successful tool call is not enough. Re-read with `get_nodes_in_graph()` / `get_connections()` / `compile_blueprint(...).success` before claiming done.
+---
 
-**Always use full paths:** `/Game/Blueprints/BP_Name` not `BP_Name`.
+## When UE is not running
 
-## Loop Prevention — CRITICAL
-
-Self-monitor for repeated failures. Track OUTCOMES, not just arguments.
-
-- Same tool call + same result appearing twice → STOP, do not retry
-- Same error across 3 different code variations → STOP, report to user
-- Max 3 attempts at the same operation
-- Max 2 discovery calls for the same function
-- After 2 failed attempts: explain what you tried and ask the user
-
-Never retry blindly. One alternative approach after failure — if that also fails, stop.
+`tools/list` is served from the cached manifest and will still work. `tools/call` will fail with a clear error. Tell the user to start Unreal Engine and wait for the VibeUE MCP server to come online (check UE Output Log for "MCP Server started at http://127.0.0.1:8088").
