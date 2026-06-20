@@ -1,6 +1,6 @@
 # VibeUE — Agent Instructions
 
-You are connected to an Unreal Engine editor via the VibeUE MCP server. You have 10 tools for Python execution, asset management, domain skill loading, log reading, terrain generation, and web research.
+You are connected to an Unreal Engine editor via the VibeUE MCP server. You have 11 tools for Python execution, asset management, domain skill loading, log reading, terrain generation, web research, and direct editor control.
 
 ---
 
@@ -9,13 +9,13 @@ You are connected to an Unreal Engine editor via the VibeUE MCP server. You have
 **Discover before you execute.** Never write Python code for a class or function you haven't confirmed exists with that exact signature. The UE Python API is large and wrong names fail silently or error at runtime.
 
 ```
-manage_skills (load relevant domain pack)
+vibeue-skills-manager (load relevant domain pack)
   → discover_python_class / discover_python_function (confirm signatures)
     → execute_python_code (run the code)
       → read_logs (if something went wrong)
 ```
 
-**Load skills proactively, not reactively.** Before working on blueprints, animation, materials, niagara, UMG, state trees, enhanced input, audio, or landscape — load the relevant skill pack first. Load multiple skills in one call; it is more efficient than separate calls.
+**Load skills proactively, not reactively.** Before working on blueprints, animation, materials, niagara, UMG, state trees, enhanced input, audio, or landscape — load the relevant skill pack first with `vibeue-skills-manager`. Call `action='list'` for the current skill menu, `action='suggest'` to match a task to a skill, `action='load'` to pull one in. Load multiple skills in one call; it is more efficient than separate calls.
 
 **Use manage_asset for all asset operations.** Do not reach for raw Python when manage_asset covers the operation. It handles Content Browser paths, reference tracking, and edge cases that raw Python gets wrong. Always use Content Browser paths (`/Game/Blueprints/BP_Player`), never file system paths. Never simulate a move with duplicate + delete — use the `move` action.
 
@@ -31,21 +31,26 @@ manage_skills (load relevant domain pack)
 
 ---
 
-## Widget Blueprint inspection
-
-Two calls, different cost — pick the right one:
-
-- `unreal.WidgetService.list_components(path)` — hierarchy and parent/child relationships, lightweight. Use this for "what's in this widget" questions.
-- `unreal.WidgetService.get_widget_snapshot(path)` — full hierarchy + slot info + all properties. Use only when you need property data (bindings, anchors, visibility, is_variable etc.). Token-heavy — don't use it just for structure.
-
----
-
 ## Loop prevention
 
 - Track outcomes, not just arguments. If you get the same result twice from the same tool call, stop — do not retry.
 - Maximum 3 attempts at the same operation.
 - After 2 failures: explain what you tried and ask the user. Do not keep hammering.
 - Try at most one alternative approach after a failure. If that also fails, stop.
+
+---
+
+## Editor control (PIE, standalone, profiling)
+
+Use the `editor_control` tool to drive the editor without writing Python. Key actions:
+
+- `start_pie` / `stop_pie` / `pie_status` — Play In Editor lifecycle
+- `start_standalone` / `stop_standalone` / `standalone_status` — launch the game as a separate process with Unreal Insights trace attached
+- `profiler_start` / profiler controls — start/stop Unreal Insights traces with specific channels (frame, cpu, gpu, log, loadtime, object, stats)
+- `analyse` — read results from the last trace file
+- `bookmark` / `region_begin` / `region_end` — annotate a running trace
+
+Load the `profiling` skill before using trace or frame-time features — it covers channel name format, gotchas, and patterns.
 
 ---
 
